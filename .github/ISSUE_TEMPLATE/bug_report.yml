@@ -68,7 +68,7 @@ body:
         ```bash
         TMPFILE=$(mktemp authd-system-info-XXXXXX.md)
         if command -v xdg-open > /dev/null && [ -n "${DISPLAY:-}" ]; then authd_editor=xdg-open; elif [ -n "${EDITOR:-}" ]; then authd_editor=$EDITOR; else authd_editor=editor; fi
-        cat > "$TMPFILE" <<EOF && $authd_editor "$TMPFILE" && rm -f "$TMPFILE"
+        cat > "$TMPFILE" <<EOF && $authd_editor "$TMPFILE"
         #### authd version
         \`\`\`
         $(/usr/libexec/authd version)
