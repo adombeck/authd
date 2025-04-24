@@ -1,6 +1,6 @@
 //go:build bubblewrap_test
 
-package userutils_test
+package localentries_test
 
 import (
 	"context"
@@ -15,10 +15,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/internal/userutils"
+	"github.com/ubuntu/authd/internal/users/localentries"
 )
 
-func TestLockAndWriteUnlockShadowPassword(t *testing.T) {
+func TestLockAndWriteUnlock(t *testing.T) {
 	require.Zero(t, os.Geteuid(), "Not root")
 
 	groupFile := filepath.Join("/etc", "group")
@@ -33,7 +33,7 @@ func TestLockAndWriteUnlockShadowPassword(t *testing.T) {
 	require.NoError(t, err, "Output: %s", output)
 
 	// Lock the group file
-	err = userutils.WriteLockShadowPassword()
+	err = localentries.WriteLock()
 	require.NoError(t, err, "Locking database")
 
 	output, err = runCmd(t, "getent", "group", "testgroup")
@@ -52,7 +52,7 @@ func TestLockAndWriteUnlockShadowPassword(t *testing.T) {
 	require.Equal(t, output, newGroupContents+",root", "Group not found")
 
 	// Unlock the group file
-	err = userutils.WriteUnlockShadowPassword()
+	err = localentries.WriteUnlock()
 	require.NoError(t, err, "Unlocking database")
 
 	// Try using gpasswd to modify the group file again. This should succeed,
@@ -76,9 +76,9 @@ testgroup:x:1001:testuser`
 	err := os.WriteFile(groupFile, []byte(groupContents), 0644)
 	require.NoError(t, err, "Writing group file")
 
-	err = userutils.WriteLockShadowPassword()
+	err = localentries.WriteLock()
 	require.NoError(t, err, "Locking once it is allowed")
-	t.Cleanup(func() { userutils.WriteUnlockShadowPassword() })
+	t.Cleanup(func() { localentries.WriteUnlock() })
 
 	output, err := runCmd(t, "getent", "group")
 	require.NoError(t, err, "Reading should be allowed")
@@ -86,22 +86,22 @@ testgroup:x:1001:testuser`
 }
 
 func TestLockAndLockAgainGroupFileOverridden(t *testing.T) {
-	userutils.OverrideShadowPasswordLocking()
-	restoreFunc := userutils.RestoreShadowPasswordLocking
+	localentries.OverrideLocking()
+	restoreFunc := localentries.RestoreLocking
 	t.Cleanup(func() { restoreFunc() })
 
-	err := userutils.WriteLockShadowPassword()
+	err := localentries.WriteLock()
 	require.NoError(t, err, "Locking once it is allowed")
 
-	err = userutils.WriteLockShadowPassword()
-	require.ErrorIs(t, err, userutils.ErrLock, "Locking again should not be allowed")
+	err = localentries.WriteLock()
+	require.ErrorIs(t, err, localentries.ErrLock, "Locking again should not be allowed")
 
-	err = userutils.WriteUnlockShadowPassword()
+	err = localentries.WriteUnlock()
 	require.NoError(t, err, "Unlocking should be allowed")
 
 	// Ensure restoring works as expected.
 	restoreFunc = func() {}
-	userutils.RestoreShadowPasswordLocking()
+	localentries.RestoreLocking()
 
 	groupFile := filepath.Join("/etc", "group")
 	groupContents := "testgroup:x:1001:testuser"
@@ -110,9 +110,9 @@ func TestLockAndLockAgainGroupFileOverridden(t *testing.T) {
 	err = os.WriteFile(groupFile, []byte(groupContents), 0644)
 	require.NoError(t, err, "Writing group file")
 
-	err = userutils.WriteLockShadowPassword()
+	err = localentries.WriteLock()
 	require.NoError(t, err, "Locking once it is allowed")
-	t.Cleanup(func() { userutils.WriteUnlockShadowPassword() })
+	t.Cleanup(func() { localentries.WriteUnlock() })
 
 	gPasswdExited := make(chan error)
 	go func() {
@@ -124,39 +124,39 @@ func TestLockAndLockAgainGroupFileOverridden(t *testing.T) {
 	case <-time.After(sleepDuration(3 * time.Second)):
 		// If we're time-outing: it's fine, it means we were locked!
 	case err := <-gPasswdExited:
-		require.ErrorIs(t, err, userutils.ErrLock, "GPasswd should fail")
+		require.ErrorIs(t, err, localentries.ErrLock, "GPasswd should fail")
 	}
 
-	require.NoError(t, userutils.WriteUnlockShadowPassword())
+	require.NoError(t, localentries.WriteUnlock())
 	<-gPasswdExited
 }
 
 func TestUnlockUnlockedOverridden(t *testing.T) {
-	userutils.OverrideShadowPasswordLocking()
-	t.Cleanup(userutils.RestoreShadowPasswordLocking)
+	localentries.OverrideLocking()
+	t.Cleanup(localentries.RestoreLocking)
 
-	err := userutils.WriteUnlockShadowPassword()
-	require.ErrorIs(t, err, userutils.ErrUnlock, "Unlocking unlocked should not be allowed")
+	err := localentries.WriteUnlock()
+	require.ErrorIs(t, err, localentries.ErrUnlock, "Unlocking unlocked should not be allowed")
 }
 
 func TestLockAndLockAgainGroupFile(t *testing.T) {
 	require.Zero(t, os.Geteuid(), "Not root")
 
-	err := userutils.WriteLockShadowPassword()
+	err := localentries.WriteLock()
 	require.NoError(t, err, "Locking once it is allowed")
 
-	err = userutils.WriteLockShadowPassword()
-	require.ErrorIs(t, err, userutils.ErrLock, "Locking again should not be allowed")
+	err = localentries.WriteLock()
+	require.ErrorIs(t, err, localentries.ErrLock, "Locking again should not be allowed")
 
-	err = userutils.WriteUnlockShadowPassword()
+	err = localentries.WriteUnlock()
 	require.NoError(t, err, "Unlocking should be allowed")
 }
 
 func TestUnlockUnlocked(t *testing.T) {
 	require.Zero(t, os.Geteuid(), "Not root")
 
-	err := userutils.WriteUnlockShadowPassword()
-	require.ErrorIs(t, err, userutils.ErrUnlock, "Unlocking unlocked should not be allowed")
+	err := localentries.WriteUnlock()
+	require.ErrorIs(t, err, localentries.ErrUnlock, "Unlocking unlocked should not be allowed")
 }
 
 func TestLockingLockedDatabase(t *testing.T) {
@@ -183,7 +183,7 @@ func TestLockingLockedDatabase(t *testing.T) {
 		syscall.Kill(cmd.Process.Pid, syscall.SIGKILL)
 		require.Error(t, <-lockerExited, "Stopping locking process")
 		require.NoError(t, <-writeLockExited, "Final locking")
-		require.NoError(t, userutils.WriteUnlockShadowPassword(), "Final unlocking")
+		require.NoError(t, localentries.WriteUnlock(), "Final unlocking")
 	})
 
 	go func() {
@@ -208,11 +208,11 @@ func TestLockingLockedDatabase(t *testing.T) {
 	case <-time.After(sleepDuration(3 * time.Second)):
 		// If we're time-outing: it's fine, it means we were locked!
 	case err := <-gPasswdExited:
-		require.ErrorIs(t, err, userutils.ErrLock, "GPasswd should fail")
+		require.ErrorIs(t, err, localentries.ErrLock, "GPasswd should fail")
 	}
 
 	go func() {
-		writeLockExited <- userutils.WriteLockShadowPassword()
+		writeLockExited <- localentries.WriteLock()
 	}()
 
 	select {
@@ -220,7 +220,7 @@ func TestLockingLockedDatabase(t *testing.T) {
 		// If we're time-outing: it's fine, it means the test-locker process is
 		// still running and holding the lock.
 	case err := <-writeLockExited:
-		require.ErrorIs(t, err, userutils.ErrLock, "Locking should not work")
+		require.ErrorIs(t, err, localentries.ErrLock, "Locking should not work")
 	}
 }
 
@@ -251,7 +251,7 @@ func TestLockingLockedDatabaseWorksAfterUnlock(t *testing.T) {
 
 	writeLockExited := make(chan error)
 	go func() {
-		writeLockExited <- userutils.WriteLockShadowPassword()
+		writeLockExited <- localentries.WriteLock()
 	}()
 
 	select {
@@ -259,12 +259,12 @@ func TestLockingLockedDatabaseWorksAfterUnlock(t *testing.T) {
 		// If we're time-outing: it's fine, it means the test-locker process is
 		// still running and holding the lock.
 	case err := <-writeLockExited:
-		require.ErrorIs(t, err, userutils.ErrLock, "Locking should not work")
+		require.ErrorIs(t, err, localentries.ErrLock, "Locking should not work")
 	}
 
 	writeUnLockExited := make(chan error)
 	go func() {
-		writeUnLockExited <- userutils.WriteUnlockShadowPassword()
+		writeUnLockExited <- localentries.WriteUnlock()
 	}()
 
 	select {
@@ -272,7 +272,7 @@ func TestLockingLockedDatabaseWorksAfterUnlock(t *testing.T) {
 		// If we're time-outing: it's fine, it means the test-locker process is
 		// still running and holding the lock.
 	case err := <-writeUnLockExited:
-		require.ErrorIs(t, err, userutils.ErrUnlock, "Locking should not work")
+		require.ErrorIs(t, err, localentries.ErrUnlock, "Locking should not work")
 	}
 
 	t.Log("Killing locking process")
@@ -290,7 +290,7 @@ func TestLockingLockedDatabaseWorksAfterUnlock(t *testing.T) {
 	require.Error(t, err, "Locker should exit with failure")
 
 	err = <-writeUnLockExited
-	// err = userutils.WriteUnlockShadowPassword()
+	// err = localentries.WriteUnlock()
 	require.NoError(t, err, "We should be able to unlock now")
 }
 

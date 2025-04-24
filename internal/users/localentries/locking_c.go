@@ -1,4 +1,4 @@
-package userutils
+package localentries
 
 /*
 #include <shadow.h>
@@ -18,7 +18,7 @@ import (
 // Note that this call will block all the other processes trying to access the
 // database in write mode, while it will return an error if called while the
 // lock is already hold by this process.
-func writeLockShadowPassword() error {
+func writeLock() error {
 	errno.Lock()
 	defer errno.Unlock()
 
@@ -37,7 +37,7 @@ func writeLockShadowPassword() error {
 // using the standard libc ulckpwdf() function.
 // As soon as this function is called all the other waiting processes will be
 // allowed to take the lock.
-func writeUnlockShadowPassword() error {
+func writeUnlock() error {
 	errno.Lock()
 	defer errno.Unlock()
 

@@ -7,12 +7,12 @@ import (
 	"log"
 	"time"
 
-	"github.com/ubuntu/authd/internal/userutils"
+	"github.com/ubuntu/authd/internal/users/localentries"
 )
 
 func main() {
 	log.Println("Locking database...")
-	err := userutils.WriteLockShadowPassword()
+	err := localentries.WriteLock()
 	if err != nil {
 		log.Fatal(err)
 	}

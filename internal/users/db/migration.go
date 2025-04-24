@@ -10,7 +10,6 @@ import (
 	"github.com/ubuntu/authd/internal/fileutils"
 	"github.com/ubuntu/authd/internal/users/db/bbolt"
 	"github.com/ubuntu/authd/internal/users/localentries"
-	"github.com/ubuntu/authd/internal/userutils"
 	"github.com/ubuntu/authd/log"
 )
 
@@ -223,12 +222,12 @@ func renameUsersInGroupFile(oldNames, newNames []string) error {
 
 	// Note that we can't use gpasswd here because `gpasswd --add` checks for the existence of the user, which causes an
 	// NSS request to be sent to authd, but authd is not ready yet because we are still migrating the database.
-	err := userutils.WriteLockShadowPassword()
+	err := localentries.WriteLock()
 	if err != nil {
 		return fmt.Errorf("failed to lock group file: %w", err)
 	}
 	defer func() {
-		if err := userutils.WriteUnlockShadowPassword(); err != nil {
+		if err := localentries.WriteUnlock(); err != nil {
 			log.Warningf(context.Background(), "Failed to unlock group file: %v", err)
 		}
 	}()

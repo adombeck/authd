@@ -13,7 +13,7 @@ import (
 	"github.com/ubuntu/authd/internal/fileutils"
 	"github.com/ubuntu/authd/internal/testutils/golden"
 	"github.com/ubuntu/authd/internal/users/db"
-	"github.com/ubuntu/authd/internal/userutils"
+	"github.com/ubuntu/authd/internal/users/localentries"
 	"github.com/ubuntu/authd/log"
 )
 
@@ -131,8 +131,8 @@ func TestMigrationToLowercaseUserAndGroupNames(t *testing.T) {
 	t.Cleanup(func() { db.SetGroupFile(origGroupFile) })
 
 	// Make the userutils package to use test locking for the group file
-	userutils.OverrideShadowPasswordLocking()
-	t.Cleanup(userutils.RestoreShadowPasswordLocking)
+	localentries.OverrideLocking()
+	t.Cleanup(localentries.RestoreLocking)
 
 	// Run the migrations
 	m, err := db.New(dbDir)
@@ -173,8 +173,8 @@ func TestMigrationToLowercaseUserAndGroupNamesWithSymlinkedGroupFile(t *testing.
 	t.Cleanup(func() { db.SetGroupFile(origGroupFile) })
 
 	// Make the userutils package to use test locking for the group file
-	userutils.OverrideShadowPasswordLocking()
-	t.Cleanup(userutils.RestoreShadowPasswordLocking)
+	localentries.OverrideLocking()
+	t.Cleanup(localentries.RestoreLocking)
 
 	// Run the migrations
 	m, err := db.New(dbDir)
@@ -213,8 +213,8 @@ func TestMigrationToLowercaseUserAndGroupNamesWithDangingSymlinkedGroupFile(t *t
 	t.Cleanup(func() { db.SetGroupFile(origGroupFile) })
 
 	// Make the userutils package to use test locking for the group file
-	userutils.OverrideShadowPasswordLocking()
-	t.Cleanup(userutils.RestoreShadowPasswordLocking)
+	localentries.OverrideLocking()
+	t.Cleanup(localentries.RestoreLocking)
 
 	// Run the migrations
 	m, err := db.New(dbDir)
@@ -255,8 +255,8 @@ func TestMigrationToLowercaseUserAndGroupNamesFails(t *testing.T) {
 	t.Cleanup(func() { db.SetGroupFile(origGroupFile) })
 
 	// Make the userutils package to use test locking for the group file
-	userutils.OverrideShadowPasswordLocking()
-	t.Cleanup(userutils.RestoreShadowPasswordLocking)
+	localentries.OverrideLocking()
+	t.Cleanup(localentries.RestoreLocking)
 
 	// Run the migrations
 	m, err := db.New(dbDir)

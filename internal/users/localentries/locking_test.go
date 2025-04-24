@@ -1,6 +1,6 @@
 //go:build !bubblewrap_test
 
-package userutils_test
+package localentries_test
 
 import (
 	"fmt"
@@ -13,10 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/ubuntu/authd/internal/fileutils"
 	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/internal/userutils"
+	"github.com/ubuntu/authd/internal/users/localentries"
 )
 
-func TestUserUtilsInBubbleWrap(t *testing.T) {
+func TestLockingInBubbleWrap(t *testing.T) {
 	t.Parallel()
 
 	testutils.SkipIfCannotRunBubbleWrap(t)
@@ -115,21 +115,21 @@ func compileLockerBinary(t *testing.T) string {
 	return testLocker
 }
 
-func TestUserUtilsPasswordLockingOverride(t *testing.T) {
+func TestLockingPasswordLockingOverride(t *testing.T) {
 	// This cannot be parallel.
 
-	userutils.OverrideShadowPasswordLocking()
-	t.Cleanup(userutils.RestoreShadowPasswordLocking)
+	localentries.OverrideLocking()
+	t.Cleanup(localentries.RestoreLocking)
 
-	err := userutils.WriteLockShadowPassword()
+	err := localentries.WriteLock()
 	require.NoError(t, err, "Locking should be allowed")
 
-	err = userutils.WriteLockShadowPassword()
-	require.ErrorIs(t, err, userutils.ErrLock, "Locking again should not be allowed")
+	err = localentries.WriteLock()
+	require.ErrorIs(t, err, localentries.ErrLock, "Locking again should not be allowed")
 
-	err = userutils.WriteUnlockShadowPassword()
+	err = localentries.WriteUnlock()
 	require.NoError(t, err, "Unlocking should be allowed")
 
-	err = userutils.WriteUnlockShadowPassword()
-	require.ErrorIs(t, err, userutils.ErrUnlock, "Unlocking unlocked should not be allowed")
+	err = localentries.WriteUnlock()
+	require.ErrorIs(t, err, localentries.ErrUnlock, "Unlocking unlocked should not be allowed")
 }
