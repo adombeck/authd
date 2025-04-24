@@ -5,10 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
-	"github.com/ubuntu/authd/internal/fileutils"
 	"github.com/ubuntu/authd/internal/users/db/bbolt"
 	"github.com/ubuntu/authd/internal/users/localentries"
 	"github.com/ubuntu/authd/internal/userutils"
@@ -217,10 +215,6 @@ func groupFileTemporaryPath() string {
 	return fmt.Sprintf("%s+", groupFile)
 }
 
-func groupFileBackupPath() string {
-	return fmt.Sprintf("%s-", groupFile)
-}
-
 // renameUsersInGroupFile renames users in the /etc/group file.
 func renameUsersInGroupFile(oldNames, newNames []string) error {
 	log.Debugf(context.Background(), "Renaming users in %q: %v -> %v", groupFile,
@@ -273,35 +267,6 @@ func renameUsersInGroupFile(oldNames, newNames []string) error {
 	// Add final new line to the group file.
 	newLines = append(newLines, "")
 
-	backupPath := groupFileBackupPath()
-	backupDone := true
-	oldBackup := ""
-
-	if tmpDir, err := os.MkdirTemp(os.TempDir(), "authd-migration-backup"); err == nil {
-		b := filepath.Join(tmpDir, filepath.Base(backupPath))
-		err := fileutils.CopyFile(backupPath, b)
-		if err == nil {
-			oldBackup = b
-		}
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			log.Warningf(context.Background(), "Failed to create backup of %q: %v", backupPath, err)
-		}
-		defer os.Remove(oldBackup)
-	}
-
-	if err := os.Remove(backupPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		log.Warningf(context.Background(), "Failed to remove group file backup: %v", err)
-	}
-	if err := os.Rename(groupFile, backupPath); err != nil {
-		log.Warningf(context.Background(), "Failed make a backup for the group file: %v", err)
-
-		if oldBackup != "" {
-			// Backup of current group file failed, let's restore the old backup.
-			_ = os.Rename(oldBackup, backupPath)
-		}
-		backupDone = false
-	}
-
 	tempPath := groupFileTemporaryPath()
 	//nolint:gosec // G306 /etc/group should indeed have 0644 permissions
 	if err := os.WriteFile(tempPath, []byte(strings.Join(newLines, "\n")), 0644); err != nil {
@@ -309,16 +274,7 @@ func renameUsersInGroupFile(oldNames, newNames []string) error {
 	}
 
 	if err := os.Rename(tempPath, groupFile); err != nil {
-		retErr := fmt.Errorf("error saving %s: %w", groupFile, err)
-		if !backupDone {
-			return retErr
-		}
-
-		if err := os.Rename(backupPath, groupFile); err != nil {
-			log.Errorf(context.Background(), "Failed to restore the backup for the group file: %v", err)
-		}
-
-		return retErr
+		return err
 	}
 
 	return nil
