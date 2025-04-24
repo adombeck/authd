@@ -275,8 +275,7 @@ func renameUsersInGroupFile(oldNames, newNames []string) error {
 	}
 
 	err = fileutils.Lrename(tempPath, groupFile)
-	var symlinkErr *fileutils.SymlinkResolutionError
-	if errors.As(err, &symlinkErr) {
+	if errors.Is(err, fileutils.SymlinkResolutionError{}) {
 		log.Warning(context.Background(), err.Error())
 		// If the symlink resolution fails, we rename the symlink without resolving it.
 		err = os.Rename(tempPath, groupFile)

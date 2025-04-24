@@ -3,7 +3,6 @@ package fileutils_test
 import (
 	"os"
 	"path/filepath"
-	"reflect"
 	"testing"
 
 	"github.com/google/uuid"
@@ -260,8 +259,8 @@ func TestLrename(t *testing.T) {
 		destIsUnreadable       bool
 		destParentDoesNotExist bool
 
-		wantError     bool
-		wantErrorType reflect.Type
+		wantError      bool
+		wantErrorTyped error
 	}{
 		"Successfully_rename_file_if_destination_does_not_exist": {},
 		"Successfully_rename_file_if_destination_is_a_file":      {destIsFile: true},
@@ -271,7 +270,8 @@ func TestLrename(t *testing.T) {
 		"Error_when_source_does_not_exist":                       {sourceDoesNotExist: true, wantError: true},
 		"Error_when_destination_is_a_directory":                  {destIsDir: true, wantError: true},
 		"Error_when_destination_parent_directory_does_not_exist": {destParentDoesNotExist: true, wantError: true},
-		"Error_when_destination_is_a_dangling_symlink":           {destIsDanglingSymlink: true, wantErrorType: reflect.TypeOf((*fileutils.SymlinkResolutionError)(nil))},
+		"Error_when_destination_is_a_dangling_symlink":           {destIsDanglingSymlink: true, wantErrorTyped: fileutils.SymlinkResolutionError{}},
+		"Error_unwrap_when_destination_is_a_dangling_symlink":    {destIsDanglingSymlink: true, wantErrorTyped: os.ErrNotExist},
 	}
 
 	for name, tc := range tests {
@@ -327,9 +327,8 @@ func TestLrename(t *testing.T) {
 			}
 
 			err := fileutils.Lrename(srcPath, destPath)
-			if tc.wantErrorType != nil {
-				target := reflect.New(tc.wantErrorType.Elem()).Interface()
-				require.ErrorAs(t, err, target, "Error should be of type %T but is of type %T", target, err)
+			if tc.wantErrorTyped != nil {
+				require.ErrorIs(t, err, tc.wantErrorTyped, "Error should match")
 				return
 			}
 			if tc.wantError {
