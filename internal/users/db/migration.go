@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/ubuntu/authd/internal/fileutils"
 	"github.com/ubuntu/authd/internal/users/db/bbolt"
 	"github.com/ubuntu/authd/internal/users/localentries"
 	"github.com/ubuntu/authd/internal/userutils"
@@ -273,7 +274,14 @@ func renameUsersInGroupFile(oldNames, newNames []string) error {
 		return fmt.Errorf("error writing %s: %w", tempPath, err)
 	}
 
-	if err := os.Rename(tempPath, groupFile); err != nil {
+	err = fileutils.Lrename(tempPath, groupFile)
+	var symlinkErr *fileutils.SymlinkResolutionError
+	if errors.As(err, &symlinkErr) {
+		log.Warning(context.Background(), err.Error())
+		// If the symlink resolution fails, we rename the symlink without resolving it.
+		err = os.Rename(tempPath, groupFile)
+	}
+	if err != nil {
 		return err
 	}
 
