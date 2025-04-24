@@ -235,7 +235,15 @@ func renameUsersInGroupFile(oldNames, newNames []string) error {
 
 	content, err := os.ReadFile(groupFile)
 	if err != nil {
-		return fmt.Errorf("error reading %s: %w", groupFile, err)
+		fi, lstatErr := os.Lstat(groupFile)
+		if lstatErr != nil {
+			return fmt.Errorf("error reading %s: %w", groupFile, lstatErr)
+		}
+		if fi.Mode()&os.ModeSymlink == 0 {
+			return fmt.Errorf("error reading %s: %w", groupFile, err)
+		}
+
+		// Dangling symlink... We can consider the group as an empty file...
 	}
 
 	oldLines := strings.Split(string(content), "\n")

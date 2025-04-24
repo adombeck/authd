@@ -193,6 +193,46 @@ func TestMigrationToLowercaseUserAndGroupNamesWithSymlinkedGroupFile(t *testing.
 	golden.CheckOrUpdate(t, string(userGroupContent), golden.WithPath("groups"))
 }
 
+func TestMigrationToLowercaseUserAndGroupNamesWithDangingSymlinkedGroupFile(t *testing.T) {
+	// Create a database from the testdata
+	dbDir := t.TempDir()
+	dbFile := "one_user_and_group_with_uppercase.db.yaml"
+	err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", dbFile), dbDir)
+	require.NoError(t, err, "Setup: could not create database from testdata")
+
+	// Create a temporary user group file for testing
+	invalidGroupPath := filepath.Join(t.TempDir(), "invalid-groups")
+
+	groupsFilePath := filepath.Join(t.TempDir(), "groups")
+	err = os.Symlink(invalidGroupPath, groupsFilePath)
+	require.NoError(t, err, "Setup: could not symlink group file")
+
+	// Make the db package use the temporary group file
+	origGroupFile := db.GroupFile()
+	db.SetGroupFile(groupsFilePath)
+	t.Cleanup(func() { db.SetGroupFile(origGroupFile) })
+
+	// Make the userutils package to use test locking for the group file
+	userutils.OverrideShadowPasswordLocking()
+	t.Cleanup(userutils.RestoreShadowPasswordLocking)
+
+	// Run the migrations
+	m, err := db.New(dbDir)
+	require.NoError(t, err)
+
+	// Check the content of the SQLite database
+	dbContent, err := db.Z_ForTests_DumpNormalizedYAML(m)
+	require.NoError(t, err)
+
+	golden.CheckOrUpdate(t, dbContent, golden.WithPath("db"))
+
+	// Check the content of the user group file
+	userGroupContent, err := os.ReadFile(groupsFilePath)
+	require.NoError(t, err)
+
+	golden.CheckOrUpdate(t, string(userGroupContent), golden.WithPath("groups"))
+}
+
 func TestMigrationToLowercaseUserAndGroupNamesFails(t *testing.T) {
 	// Create a database from the testdata
 	dbDir := t.TempDir()
