@@ -73,12 +73,13 @@ func TestSetUserID(t *testing.T) {
 			m := newManagerForTests(t, dbDir)
 
 			username := "user1"
+			var oldUID uint32 = 1111
 			if tc.nonExistentUser {
 				username = "nonexistent"
 			} else if tc.emptyUsername {
 				username = ""
 			} else if !tc.homeDirDoesNotExist {
-				uid := 1111
+				uid := int(oldUID)
 				gid := 11111
 				if tc.homeDirOwnedByOtherUser {
 					uid = 2222
@@ -94,6 +95,8 @@ func TestSetUserID(t *testing.T) {
 
 			if tc.uidAlreadySet {
 				setUID(t, m, username, newUID)
+				//nolint:gosec // G115 setUID already checked that converting newUID to uint32 does not overflow
+				oldUID = uint32(newUID)
 			}
 			if tc.uidAlreadyInUseByAuthdUser {
 				setUID(t, m, "user2", newUID)
@@ -109,7 +112,7 @@ func TestSetUserID(t *testing.T) {
 			}
 
 			//nolint:gosec // G115 we set the UID above to values that are valid uint32
-			warnings, err := m.SetUserID(username, uint32(newUID))
+			warnings, gotOldUID, err := m.SetUserID(username, uint32(newUID))
 			log.Infof(context.Background(), "SetUserID error: %v", err)
 			log.Infof(context.Background(), "SetUserID warnings: %v", warnings)
 
@@ -123,6 +126,7 @@ func TestSetUserID(t *testing.T) {
 			}
 			require.NoError(t, err, "SetUserID should not return an error")
 			require.Len(t, warnings, tc.wantWarnings, "Unexpected number of warnings")
+			require.Equal(t, strconv.FormatUint(uint64(oldUID), 10), strconv.FormatUint(uint64(gotOldUID), 10), "SetUserID should return the old UID")
 
 			yamlData, err := db.Z_ForTests_DumpNormalizedYAML(m.DB())
 			require.NoError(t, err)

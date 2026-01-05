@@ -370,15 +370,15 @@ func compareNewUserInfoWithUserInfoFromDB(newUserInfo, dbUserInfo types.UserInfo
 }
 
 // SetUserID updates the UID of the user with the given name to the specified UID.
-func (m *Manager) SetUserID(name string, uid uint32) (warnings []string, err error) {
+func (m *Manager) SetUserID(name string, uid uint32) (warnings []string, oldUID uint32, err error) {
 	log.Debugf(context.TODO(), "Updating UID for user %q to %d", name, uid)
 
 	if name == "" {
-		return nil, errors.New("empty username")
+		return nil, 0, errors.New("empty username")
 	}
 
 	if uid > math.MaxInt32 {
-		return nil, fmt.Errorf("UID %d is too large to convert to int32", uid)
+		return nil, 0, fmt.Errorf("UID %d is too large to convert to int32", uid)
 	}
 
 	m.userManagementMu.Lock()
@@ -387,20 +387,20 @@ func (m *Manager) SetUserID(name string, uid uint32) (warnings []string, err err
 	// Call lckpwdf to avoid race conditions with other processes which add UIDs
 	err = userslocking.WriteLock()
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer func() { err = errors.Join(err, userslocking.WriteUnlock()) }()
 
 	// Check if the user exists
 	oldUser, err := m.db.UserByName(name)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	// Check if the user already has the given UID
 	if oldUser.UID == uid {
 		warning := fmt.Sprintf("User %q already has UID %d", name, uid)
 		log.Info(context.Background(), warning)
-		return []string{warning}, nil
+		return []string{warning}, oldUser.UID, nil
 	}
 
 	// Check if another user already has the given UID
@@ -408,21 +408,21 @@ func (m *Manager) SetUserID(name string, uid uint32) (warnings []string, err err
 	var userErr user.UnknownUserIdError
 	if err != nil && !errors.As(err, &userErr) {
 		// Unexpected error
-		return nil, err
+		return nil, 0, err
 	}
 	if err == nil {
-		return nil, fmt.Errorf("UID %d already exists", uid)
+		return nil, 0, fmt.Errorf("UID %d already exists", uid)
 	}
 
 	// Check if the user has active processes
 	err = proc.CheckUserBusy(name, oldUser.UID)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	err = m.db.SetUserID(name, uid)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	// Check if the home directory is currently owned by the user.
@@ -430,28 +430,28 @@ func (m *Manager) SetUserID(name string, uid uint32) (warnings []string, err err
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		warning := fmt.Sprintf("Could not get owner of home directory %q", oldUser.Dir)
 		log.Warningf(context.Background(), "%s: %v", warning, err)
-		return []string{warning}, nil
+		return []string{warning}, oldUser.UID, nil
 	}
 	if errors.Is(err, os.ErrNotExist) {
 		// The home directory does not exist, so we don't need to change the owner.
 		log.Debugf(context.Background(), "Home directory %q for user %q does not exist, skipping ownership change", oldUser.Dir, name)
-		return nil, nil
+		return nil, oldUser.UID, nil
 	}
 
 	if homeUID != oldUser.UID {
 		warning := fmt.Sprintf("Not changing ownership of home directory %q, because it is not owned by UID %d (current owner: %d)", oldUser.Dir, oldUser.UID, homeUID)
 		log.Warning(context.Background(), warning)
-		return []string{warning}, nil
+		return []string{warning}, oldUser.UID, nil
 	}
 
 	// Change the ownership of all files in the home directory from the old UID to the new UID.
 	log.Debugf(context.Background(), "Changing ownership of home directory %q from UID %d to UID %d", oldUser.Dir, oldUser.UID, uid)
 	err = fileutils.ChownRecursiveFrom(oldUser.Dir, oldUser.UID, 0, int32(uid), -1)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	return nil, nil
+	return nil, oldUser.UID, nil
 }
 
 // SetGroupID updates the GID of the group with the given name to the specified GID.

@@ -178,6 +178,7 @@ message SetUserIDRequest {
 
 message SetUserIDResponse {
   repeated string warnings = 1;
+  uint32 old_id = 2;
 }
 
 message SetGroupIDRequest {

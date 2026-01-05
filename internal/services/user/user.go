@@ -231,13 +231,13 @@ func (s Service) SetUserID(ctx context.Context, req *authd.SetUserIDRequest) (*a
 		return nil, status.Error(codes.InvalidArgument, "no user name provided")
 	}
 
-	warnings, err := s.userManager.SetUserID(name, req.GetId())
+	warnings, oldID, err := s.userManager.SetUserID(name, req.GetId())
 	if err != nil {
 		log.Errorf(ctx, "SetUserID: %v", err)
 		return nil, grpcError(err)
 	}
 
-	return &authd.SetUserIDResponse{Warnings: warnings}, nil
+	return &authd.SetUserIDResponse{Warnings: warnings, OldId: oldID}, nil
 }
 
 // SetGroupID sets the GID of a group.

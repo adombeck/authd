@@ -71,6 +71,15 @@ Examples:
 			fmt.Fprintf(os.Stderr, "Warning: %s\n", warning)
 		}
 
+		if uint64(resp.OldId) != uid {
+			msg := fmt.Sprintf(`Note: Files outside the user's home directory are not updated and must be changed manually.
+To change ownership of all files on the system from the old UID to the new UID, run:
+
+  sudo chown -R --from %d %d /
+`, resp.OldId, uid)
+			fmt.Println(msg)
+		}
+
 		return nil
 	},
 }

@@ -1234,6 +1234,7 @@ func (x *SetUserIDRequest) GetLang() string {
 type SetUserIDResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Warnings      []string               `protobuf:"bytes,1,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	OldId         uint32                 `protobuf:"varint,2,opt,name=old_id,json=oldId,proto3" json:"old_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1273,6 +1274,13 @@ func (x *SetUserIDResponse) GetWarnings() []string {
 		return x.Warnings
 	}
 	return nil
+}
+
+func (x *SetUserIDResponse) GetOldId() uint32 {
+	if x != nil {
+		return x.OldId
+	}
+	return 0
 }
 
 type SetGroupIDRequest struct {
@@ -1952,9 +1960,10 @@ const file_authd_proto_rawDesc = "" +
 	"\x10SetUserIDRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\rR\x02id\x12\x12\n" +
-	"\x04lang\x18\x03 \x01(\tR\x04lang\"/\n" +
+	"\x04lang\x18\x03 \x01(\tR\x04lang\"F\n" +
 	"\x11SetUserIDResponse\x12\x1a\n" +
-	"\bwarnings\x18\x01 \x03(\tR\bwarnings\"K\n" +
+	"\bwarnings\x18\x01 \x03(\tR\bwarnings\x12\x15\n" +
+	"\x06old_id\x18\x02 \x01(\rR\x05oldId\"K\n" +
 	"\x11SetGroupIDRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\rR\x02id\x12\x12\n" +
