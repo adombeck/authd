@@ -5,6 +5,7 @@ go 1.25.0
 toolchain go1.25.5
 
 require (
+	github.com/canonical/gencodo v0.1.1
 	github.com/charmbracelet/bubbles v0.20.0
 	github.com/charmbracelet/bubbletea v1.3.4
 	github.com/charmbracelet/lipgloss v1.1.0
@@ -75,3 +76,5 @@ require (
 // The branch below includes changes from this upstream PR:
 // - https://github.com/msteinert/pam/pull/13
 replace github.com/msteinert/pam/v2 => github.com/3v1n0/go-pam/v2 v2.0.0-20240321054421-f19903865176
+
+replace github.com/canonical/gencodo => /home/adrian.dombeck@gmail.com/projects/gencodo

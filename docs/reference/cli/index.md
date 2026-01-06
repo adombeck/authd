@@ -1,22 +1,25 @@
-# authctl reference
+# authctl (CLI)
 
 The `authctl` command line tool is used to manage authd users and groups.
 
-Available commands:
-
-```{toctree}
-:titlesonly:
-:hidden:
-authctl
-authctl_user
-authctl_group
-```
+It exposes the following commands, each with its own set of options:
 
 
-```{toctree}
-:titlesonly:
-authctl_user_lock
-authctl_user_unlock
-authctl_user_set-uid
-authctl_group_set-gid
-```
+:::{include} authctl-group.md
+:::
+
+:::{include} authctl-group-set-gid.md
+:::
+
+:::{include} authctl-user.md
+:::
+
+:::{include} authctl-user-lock.md
+:::
+
+:::{include} authctl-user-set-uid.md
+:::
+
+:::{include} authctl-user-unlock.md
+:::
+

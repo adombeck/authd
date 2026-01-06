@@ -2,6 +2,7 @@
 package main
 
 import (
+	_ "embed"
 	"flag"
 	"fmt"
 	"log"
@@ -9,9 +10,24 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/canonical/gencodo"
 	"github.com/spf13/cobra/doc"
 	"github.com/ubuntu/authd/cmd/authctl/root"
 )
+
+//go:embed cli.md
+var indexTemplate string
+
+//go:embed command.md
+var commandTemplate string
+
+func filePrepender(filename string) string {
+	return ""
+}
+
+func linkHandler(name, ref string) string {
+	return fmt.Sprintf(":ref:`%s <%s>`", name, ref)
+}
 
 func main() {
 	out := flag.String("out", "./docs/cli", "output directory")
@@ -40,8 +56,21 @@ func main() {
 				log.Fatal(err)
 			}
 		} else {
-			if err := doc.GenMarkdownTree(rootCmd, *out); err != nil {
-				log.Fatal(err)
+			td := gencodo.TemplateInfo{
+				IndexFileName:         "index.md",
+				IndexTemplate:         indexTemplate,
+				SingleCommandTemplate: commandTemplate,
+			}
+
+			err := gencodo.GenDocsTree(
+				rootCmd,
+				*out,
+				td,
+				filePrepender,
+				linkHandler,
+			)
+			if err != nil {
+				log.Fatalf("failed to generate documentation: %v", err)
 			}
 		}
 	case "man":
