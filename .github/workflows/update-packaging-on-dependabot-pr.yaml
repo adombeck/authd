@@ -102,6 +102,12 @@ jobs:
       contents: read
     env:
       IS_CARGO_PR: ${{ startsWith(github.event.pull_request.head.ref, 'dependabot/cargo/') }}
+    defaults:
+      run:
+        # ubuntu:noble doesn't set bash as the default shell for run steps
+        # (unlike ubuntu-latest runners), so `set -o pipefail` below would
+        # otherwise fail under the container's default sh/dash.
+        shell: bash
 
     steps:
       # actions/checkout needs git, which isn't part of the ubuntu:noble
@@ -225,6 +231,12 @@ jobs:
       contents: read
     outputs:
       changed: ${{ steps.diff.outputs.changed }}
+    defaults:
+      run:
+        # ubuntu:devel doesn't set bash as the default shell for run steps
+        # (unlike ubuntu-latest runners), so `set -o pipefail` below would
+        # otherwise fail under the container's default sh/dash.
+        shell: bash
 
     steps:
       # actions/checkout and actions/setup-go both need git, which isn't part
