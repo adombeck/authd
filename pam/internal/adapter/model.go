@@ -110,7 +110,8 @@ type GetAuthenticationModesRequested struct{}
 
 // AuthModeSelected is triggered when the authentication mode has been chosen.
 type AuthModeSelected struct {
-	ID string
+	ID      string
+	fromGDM bool
 }
 
 // UILayoutReceived means that we got the ui layout to display by the broker.
@@ -321,6 +322,9 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case SessionStarted:
 		safeMessageDebug(msg)
 		m.sessionStartingForBroker = ""
+		if m.clientType == Gdm {
+			m.gdmModel.pendingEchoAuthModeID = ""
+		}
 		pubASN1, err := base64.StdEncoding.DecodeString(msg.encryptionKey)
 		if err != nil {
 			return m, sendEvent(pamError{
@@ -362,6 +366,15 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case StageChanged:
 		safeMessageDebug(msg)
+		if m.clientType == Gdm && msg.Stage == proto.Stage_challenge {
+			// GDM must enter the challenge stage before it receives the
+			// startAuthentication event. These commands are otherwise
+			// returned in a batch and can reach GDM in either order.
+			var gdmCmd, authCmd tea.Cmd
+			m.gdmModel, gdmCmd = m.gdmModel.Update(msg)
+			m.authenticationModel, authCmd = m.authenticationModel.Update(msg)
+			return m, tea.Sequence(gdmCmd, authCmd)
+		}
 
 	case GetAuthenticationModesRequested:
 		safeMessageDebug(msg)
@@ -423,21 +436,32 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		return m, tea.Sequence(
-			m.authenticationModel.Compose(
-				m.currentSession.brokerID,
-				m.currentSession.sessionID,
-				m.currentSession.encryptionKey,
-				msg.layout,
-			),
-			m.updateClientModel(msg),
+		composeCmd := m.authenticationModel.Compose(
+			m.currentSession.brokerID,
+			m.currentSession.sessionID,
+			m.currentSession.encryptionKey,
+			msg.layout,
 		)
+		// Send the layout to GDM before requesting the challenge stage. The
+		// stage and layout commands otherwise run concurrently, so GDM may
+		// switch stages before it has the content to display.
+		return m, tea.Sequence(m.updateClientModel(msg), composeCmd)
 
 	case SessionEnded:
 		safeMessageDebug(msg)
 		m.sessionStartingForBroker = ""
 		m.currentSession = nil
+		if m.clientType == Gdm {
+			m.gdmModel.pendingEchoAuthModeID = ""
+		}
 		return m, nil
+
+	case stopAuthentication:
+		if msg.gen != m.authenticationModel.authGen {
+			safeMessageDebug(msg, "ignoring stale stop, current gen %d",
+				m.authenticationModel.authGen)
+			return m, nil
+		}
 	}
 
 	var cmd tea.Cmd

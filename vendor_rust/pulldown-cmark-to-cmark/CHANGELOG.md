@@ -5,37 +5,325 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## 21.0.0 (2025-02-18)
+## 22.0.3 (2026-09-28)
 
-<csr-id-05e247e5c7a74ac7bf9a906417724b8a275cabcc/>
-<csr-id-2252ba1d9cf93256a8bcdd721813ed2397e32464/>
+### Bug Fixes
 
-The breaking release is to avoid side-effects with different `pulldown-cmark` versions.
-This crate now comes with version 13.
-
-### Other
-
- - <csr-id-05e247e5c7a74ac7bf9a906417724b8a275cabcc/> Adjust wording + typos
-
-### Refactor
-
- - <csr-id-2252ba1d9cf93256a8bcdd721813ed2397e32464/> Add helper to factor out newline + padding pattern
-   When writing a newline into the generated Markdown content
-   to start a new line of output, it is (almost) always necessary
-   to output the "padding" characters used to indent the content
-   at the current location in the document, based on the hierarchy
-   of block-level elements the output cursor is "inside" of.
+ - <csr-id-9905181d4721007b27c2ce2a214314450067d28e/> discard quote terminators when definitions end
+   Ending a definition emits a newline outside its block quote. Discard
+   the pending quote-ending line there so the next tight-list child cannot
+   start an extra empty quote. Keep pending lines across item and list ends,
+   which do not themselves write outside the quote.
    
-   Since writing a newline and writing the current padding are
-   always paired, factoring them out into a function should help
-   with readability and consistency in performing this minor
-   two-step dance correctly.
+   Cover direct and nested definitions, enclosing block quotes, and resumed
+   serialization.
+ - <csr-id-a7d1f06907d22b13ec7aad3b62b4c4e049a2e2b9/> preserve paragraph spacing in loose definitions
+   Once inline events consume the title's pending newline, a code term no
+   longer leaves a blank line before its definition. Defer the definition
+   marker until its first child so a paragraph can request the required
+   blank line before the marker. Flush a pending marker when finalizing.
+   
+   Cover tight and loose terms, multiple definitions, nested containers,
+   empty definitions, and serialization resumed at every event boundary.
+   Update the definition-list snapshot for the added paragraph spacing.
+ - <csr-id-afe8ac6ac5476d4149c9c04b3c88aea16aac5741/> account for HTML newlines in tight list items
+   HTML events already emit their trailing newline. Count that line break
+   when limiting separators in tight items so following inline content does
+   not make the list loose. Keep normal paragraph spacing and remember the
+   newline across resumed serialization.
+ - <csr-id-64dca630f68c087bc2f58d11e6f73071b74a96d9/> write pending newlines before every inline event
+   For `Text` and `InlineHtml` events, we'd write out pending newlines, but for
+   `Code`, `InlineMath`, `DisplayMath`, `FootnoteReference`, and `TaskListMarker`,
+   we did not. In a tight list item, inline content can directly follow the
+   end of a block, so the input:
+   
+   ```
+   * # heading
+     `code`
+   ```
+   
+   would roundtrip as:
+   
+   ```
+   * # heading`code`
+   ```
+ - <csr-id-2ab730f6e6fb545fbef897e0411e9a0e92aca0e2/> avoid instances of tight lists roundtripping to loose
+   This is a somewhat subtle commit because we have to handle tight list block
+   quotes carefully, such as:
+   
+   ```markdown
+   * item
+     * a
+       > q
+       >
+     text
+   ```
+   
+   Most of the commit is about dealing with this case.
+ - <csr-id-94382897ed118617b43d5addb98000b95de4d9c0/> in tight list items, start thematic breaks on their own line
+   In a tight list item, a thematic break can directly follow the item's text.
+   Nothing before the break asks for a newline in that case, so the input:
+   
+   ```
+   * item
+     ***
+   ```
+   
+   would roundtrip as:
+   
+   ```
+   * item---
+   ```
+   
+   which parses as a single line of text.
+   
+   Start the break on a new line. A `---` line directly under a line of text is a
+   setext heading underline, which would turn `item` into a heading, so write the
+   break as `***` in this case. Thematic breaks everywhere else are still written
+   as `---`.
+ - <csr-id-fcc8237554ab6814b66079e30d7bd4d881402058/> in tight list items, start blocks on a new line after inline content
 
 ### Commit Statistics
 
 <csr-read-only-do-not-edit/>
 
  - 8 commits contributed to the release.
+ - 7 commits were understood as [conventional](https://www.conventionalcommits.org).
+ - 0 issues like '(#ID)' were seen in commit messages
+
+### Commit Details
+
+<csr-read-only-do-not-edit/>
+
+<details><summary>view details</summary>
+
+ * **Uncategorized**
+    - Merge pull request #112 from sunshowers/more-fixes ([`299ed9b`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/299ed9b86fa43d4778037cbf05b30f044928c9c9))
+    - Discard quote terminators when definitions end ([`9905181`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/9905181d4721007b27c2ce2a214314450067d28e))
+    - Preserve paragraph spacing in loose definitions ([`a7d1f06`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/a7d1f06907d22b13ec7aad3b62b4c4e049a2e2b9))
+    - Account for HTML newlines in tight list items ([`afe8ac6`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/afe8ac6ac5476d4149c9c04b3c88aea16aac5741))
+    - Write pending newlines before every inline event ([`64dca63`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/64dca630f68c087bc2f58d11e6f73071b74a96d9))
+    - Avoid instances of tight lists roundtripping to loose ([`2ab730f`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/2ab730f6e6fb545fbef897e0411e9a0e92aca0e2))
+    - In tight list items, start thematic breaks on their own line ([`9438289`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/94382897ed118617b43d5addb98000b95de4d9c0))
+    - In tight list items, start blocks on a new line after inline content ([`fcc8237`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/fcc8237554ab6814b66079e30d7bd4d881402058))
+</details>
+
+## 22.0.2 (2026-09-28)
+
+### Bug Fixes
+
+ - <csr-id-b4c3dacd7808a47aa44ff1d0df3fd64cd0426588/> ensure blank lines are emitted after nested lists if necessary
+   Previously, the input:
+   
+   ```
+   1. item
+   
+   * a
+   * b
+   
+   para
+   ```
+   
+   would roundtrip as:
+   
+   ```
+   1. item
+   
+   * a
+   * b
+   para
+   ```
+   
+   This is incorrect, because the CommonMark spec would treat `para` as part of
+   the `b` item.
+   
+   Fix this by tracking the last event, and using that to emit a blank line if
+   necessary. This isn't perfect but it should handle the vast majority of cases.
+
+### Commit Statistics
+
+<csr-read-only-do-not-edit/>
+
+ - 3 commits contributed to the release.
+ - 49 days passed between releases.
+ - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
+ - 0 issues like '(#ID)' were seen in commit messages
+
+### Commit Details
+
+<csr-read-only-do-not-edit/>
+
+<details><summary>view details</summary>
+
+ * **Uncategorized**
+    - Release pulldown-cmark-to-cmark v22.0.2 ([`b438b59`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/b438b59f25f266a5175dcc78c49f1eae7a9fdc8a))
+    - Merge pull request #111 from sunshowers/blank-lines-after-nested-lists ([`a218fb1`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/a218fb19a097f3a08c86b2d13650adec1a93dc0c))
+    - Ensure blank lines are emitted after nested lists if necessary ([`b4c3dac`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/b4c3dacd7808a47aa44ff1d0df3fd64cd0426588))
+</details>
+
+## 22.0.1 (2026-08-10)
+
+### Bug Fixes
+
+ - <csr-id-e4467422fbb68aff72a96808c3ab62b503897adc/> escape brackets in generated link labels
+   <!-- agent -->
+   Shortcut and collapsed link labels are reconstructed from decoded text, so
+   bracket escapes were lost when their reference definitions were emitted. This
+   made the generated Markdown invalid for labels containing brackets.
+   
+   Escape backslashes and square brackets while capturing generated link and image
+   labels, while leaving parser-provided explicit reference IDs unchanged to avoid
+   double escaping. Add regression coverage for shortcut, explicit, and image
+   references and update the CommonMark conformance count from 585 to 586.
+
+### Commit Statistics
+
+<csr-read-only-do-not-edit/>
+
+ - 3 commits contributed to the release.
+ - 230 days passed between releases.
+ - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
+ - 1 unique issue was worked on: [#109](https://github.com/Byron/pulldown-cmark-to-cmark/issues/109)
+
+### Commit Details
+
+<csr-read-only-do-not-edit/>
+
+<details><summary>view details</summary>
+
+ * **[#109](https://github.com/Byron/pulldown-cmark-to-cmark/issues/109)**
+    - Escape brackets in generated link labels ([`e446742`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/e4467422fbb68aff72a96808c3ab62b503897adc))
+ * **Uncategorized**
+    - Release pulldown-cmark-to-cmark v22.0.1 ([`66f7c5d`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/66f7c5d4a99bd312eacc876b81dad1c91f623e4f))
+    - Merge pull request #110 from Byron/escape-in-links ([`41f854b`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/41f854b001017daa44c8a9f6af3b9ab442a7d13a))
+</details>
+
+## 22.0.0 (2025-12-23)
+
+### New Features
+
+ - <csr-id-9b55c822ae8c824954452d1414e1dc33eadc5b73/> Add #![deny(missing_docs)] attribute to enable missing documentation checks and add comprehensive documentation for all public items
+
+### New Features (BREAKING)
+
+ - <csr-id-ffa22b3e25ef79aad66774f1c08b1a4a1b1bc4f4/> Add support for super/subscript without html
+   Superscript and subscript can be presented in markdown as:
+   ^superscript^ and ~subscript~ respectively. This is not always turned on,
+   and many people prefer the HTML tag form, however in order to round-trip
+   markdown which uses the symbolic form we need an option to enable that.
+   
+   This feature is enabled via a new field in the `Options` struct.
+
+### Commit Statistics
+
+<csr-read-only-do-not-edit/>
+
+ - 8 commits contributed to the release.
+ - 44 days passed between releases.
+ - 2 commits were understood as [conventional](https://www.conventionalcommits.org).
+ - 0 issues like '(#ID)' were seen in commit messages
+
+### Commit Details
+
+<csr-read-only-do-not-edit/>
+
+<details><summary>view details</summary>
+
+ * **Uncategorized**
+    - Release pulldown-cmark-to-cmark v22.0.0 ([`d04ad95`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/d04ad95564f332d3953325a74282f17f47988be9))
+    - Merge pull request #107 from kinnison/super-sub-not-html ([`15e7a74`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/15e7a74364cf05e437029d84ec6b78a6662fd137))
+    - Refactor ([`aba929c`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/aba929c5068f69de5ae2e92b397fd901922f2c0d))
+    - Add testing support for symbolic super/subscript ([`463b65a`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/463b65a0ede1c99d921862645931c8ecc117c159))
+    - Add support for super/subscript without html ([`ffa22b3`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/ffa22b3e25ef79aad66774f1c08b1a4a1b1bc4f4))
+    - Merge pull request #108 from Byron/copilot/add-documentation-and-deny-attrs ([`077d5d0`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/077d5d0f7b464d4fdd251bc4adfe5679fb6a2736))
+    - Refactor ([`6d09f44`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/6d09f445a72555fbd70812b21a38ba65bba0e42b))
+    - Add #![deny(missing_docs)] attribute to enable missing documentation checks and add comprehensive documentation for all public items ([`9b55c82`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/9b55c822ae8c824954452d1414e1dc33eadc5b73))
+</details>
+
+## 21.1.0 (2025-11-09)
+
+<csr-id-5b93e7e7b51000632bfecf6d7a49e48d9fb3bc19/>
+<csr-id-942c42ba6fc517b595130603e9fd4aa1309ee755/>
+<csr-id-30b706b719fd2554b664bc7d2c40bcb7e7095a8c/>
+<csr-id-31a49d0d45c1c32bfcf1c653121ee3ca0a1d4fe8/>
+<csr-id-3ab278b9db5546f405bcd13bdf5c3f0d59d2fb8a/>
+
+### New Features
+
+ - <csr-id-91ffc9508b129cd603b870d38fd9bd88240d07fe/> Improve CommonMark conformance testing output
+   This is a major improvement to the rendering of the failing
+   CommonMark conformance test output, that should make it easier
+   to read and understand when pulldown-cmark-to-cmark is producing
+   erroneous output.
+   
+   Additionally, this introduces a way to force the printing of the
+   CommonMark failure report from the command line:
+   
+   $ FULL_CMARK_RESULTS=true cargo test
+   
+   and documents in CONTRIBUTING.md that new contributors may want
+   to start with trying to improve conformance.
+   
+   This removes `#[should_panic]` from the main CommonMark test. Instead,
+   we now hard-code in how many of the CommonMark tests are known to pass.
+   
+   If the number that actually passes increases or decreases, this test
+   will fail, informing the user either that they have introduced a bug
+   (decrease), or that they've successfully improved conformance (increase).
+   
+   Previously, if a change accidentally reduce the conformance, there was
+   no easy way to know, since that information was not stored/tracked
+   in any way.
+
+### Commit Statistics
+
+<csr-read-only-do-not-edit/>
+
+ - 13 commits contributed to the release.
+ - 264 days passed between releases.
+ - 6 commits were understood as [conventional](https://www.conventionalcommits.org).
+ - 0 issues like '(#ID)' were seen in commit messages
+
+### Commit Details
+
+<csr-read-only-do-not-edit/>
+
+<details><summary>view details</summary>
+
+ * **Uncategorized**
+    - Release pulldown-cmark-to-cmark v21.1.0 ([`4fa1f9e`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/4fa1f9eab4754267e2d6580fe7e64f8aa4c113fa))
+    - Release pulldown-cmark-to-cmark v21.0.0 ([`d69f748`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/d69f748198d26828f74c0e1a0faed6a986cb4b97))
+    - Merge pull request #104 from ConnorGray/connorgray/refactor-5 ([`bf34a3c`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/bf34a3cac68e6f82a24ee3d44224a9e2ef2bcd0d))
+    - Add Repeated utility to simplify writing repeated content ([`942c42b`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/942c42ba6fc517b595130603e9fd4aa1309ee755))
+    - Merge pull request #103 from ConnorGray/connorgray/refactor-4 ([`3005f1b`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/3005f1b10548a08a412086ecddc22b907ad0b60d))
+    - Drop comment headers ([`5b93e7e`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/5b93e7e7b51000632bfecf6d7a49e48d9fb3bc19))
+    - Move and group related code ([`30b706b`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/30b706b719fd2554b664bc7d2c40bcb7e7095a8c))
+    - Merge pull request #102 from ConnorGray/connorgray/revamp-conformance-testing ([`3169307`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/3169307f9dba2683eaa0f425177b2905669cd705))
+    - Merge pull request #101 from ConnorGray/connorgray/refactor-3 ([`ac3aaec`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/ac3aaec506e3eb5bdd85ff3a2bc9b1f2cee0f5c9))
+    - Merge pull request #100 from ConnorGray/connorgray/refactor-2 ([`29c8c20`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/29c8c20bb8632e70d6ed10eb43fa68f673988748))
+    - Improve CommonMark conformance testing output ([`91ffc95`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/91ffc9508b129cd603b870d38fd9bd88240d07fe))
+    - Add State::set_minimum_newlines_before_start() ([`31a49d0`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/31a49d0d45c1c32bfcf1c653121ee3ca0a1d4fe8))
+    - Use `write_padded_string()` in a couple additional places ([`3ab278b`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/3ab278b9db5546f405bcd13bdf5c3f0d59d2fb8a))
+</details>
+
+## 21.0.0 (2025-02-18)
+
+<csr-id-05e247e5c7a74ac7bf9a906417724b8a275cabcc/>
+<csr-id-2252ba1d9cf93256a8bcdd721813ed2397e32464/>
+<csr-id-942c42ba6fc517b595130603e9fd4aa1309ee755/>
+<csr-id-30b706b719fd2554b664bc7d2c40bcb7e7095a8c/>
+<csr-id-31a49d0d45c1c32bfcf1c653121ee3ca0a1d4fe8/>
+<csr-id-3ab278b9db5546f405bcd13bdf5c3f0d59d2fb8a/>
+<csr-id-5b93e7e7b51000632bfecf6d7a49e48d9fb3bc19/>
+
+The breaking release is to avoid side-effects with different `pulldown-cmark` versions.
+This crate now comes with version 13.
+
+### Commit Statistics
+
+<csr-read-only-do-not-edit/>
+
+ - 9 commits contributed to the release.
  - 6 days passed between releases.
  - 2 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
@@ -47,6 +335,7 @@ This crate now comes with version 13.
 <details><summary>view details</summary>
 
  * **Uncategorized**
+    - Release pulldown-cmark-to-cmark v21.0.0 ([`c1347d1`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/c1347d140499a637c98bcb9dc6f324731919dcf6))
     - Update changelog prior to release ([`475478a`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/475478a781fafc42b3e0879d9fe12993c3d89cb4))
     - Bump version to 21 for pulldown-cmark 13 ([`ed16be5`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/ed16be5ad4d32d3d17a5ac86a60f7e0a2cbf2c91))
     - Merge pull request #99 from danieleades/cmark-13 ([`fb9bbd6`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/fb9bbd6a4201f917041e7ca887e1845463be03df))
@@ -68,7 +357,7 @@ This crate now comes with version 13.
 <csr-read-only-do-not-edit/>
 
  - 8 commits contributed to the release.
- - 58 days passed between releases.
+ - 59 days passed between releases.
  - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
  - 1 unique issue was worked on: [#97](https://github.com/Byron/pulldown-cmark-to-cmark/issues/97)
 
@@ -188,6 +477,7 @@ This crate now comes with version 13.
 <csr-read-only-do-not-edit/>
 
  - 12 commits contributed to the release.
+ - 37 days passed between releases.
  - 2 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -215,14 +505,6 @@ This crate now comes with version 13.
 ## 18.0.0 (2024-10-16)
 
 <csr-id-b3d7df263409e2f9ebdaae843e087c714b994367/>
-
-### Chore
-
- - <csr-id-b3d7df263409e2f9ebdaae843e087c714b994367/> use `TextMergeStream` for round-trip tests
-   This increases the amount of passing tests to 578.
-   It doesn't strictly improve the quality of implementation,
-   but since separate text events aren't supposed to be semantic,
-   these failures seem spurrious.
 
 ### New Features
 
@@ -284,7 +566,7 @@ This crate now comes with version 13.
 <csr-read-only-do-not-edit/>
 
  - 6 commits contributed to the release.
- - 14 days passed between releases.
+ - 15 days passed between releases.
  - 2 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -306,15 +588,6 @@ This crate now comes with version 13.
 ## 16.0.1 (2024-08-22)
 
 <csr-id-21a7f26a611e7a5b99ab33e9386acd30f0188960/>
-
-### Other
-
- - <csr-id-21a7f26a611e7a5b99ab33e9386acd30f0188960/> Lower MSRV to 1.71.1
-   This project builds successfully with the MSRV of `pulldown-cmark`. Therefore we can lower `rust-version` to 1.71.1.
-   
-   Add documentation for the current MSRV and that this project follows MSRV policy of `pulldown-cmark`.
-   
-   Use `cargo hack` for MSRV CI job, to automatically install rustc according to `rust-version` and then execute `cargo check`.
 
 ### Commit Statistics
 
@@ -359,7 +632,7 @@ Add support for `pulldown-cmark` v0.12, and an understanding of markdown Definit
 <csr-read-only-do-not-edit/>
 
  - 8 commits contributed to the release.
- - 64 days passed between releases.
+ - 65 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -504,6 +777,7 @@ to `State`, which isn't used unless you do incremental event serialization.
 <csr-read-only-do-not-edit/>
 
  - 17 commits contributed to the release.
+ - 85 days passed between releases.
  - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -545,10 +819,6 @@ to `State`, which isn't used unless you do incremental event serialization.
 
  - <csr-id-7b27baad538570400eeb651b2e9b2b786ad43189/> set correct yaml metablock end tag
 
-### Test
-
- - <csr-id-5d940367d7d720a176c361b99ab8699897a53313/> add frontmatter snapshot
-
 ### New Features (BREAKING)
 
  - <csr-id-834c74b9df9b9451000b069988d8259e2b881692/> support for controlling the amount of newlines after metadata blocks.
@@ -558,6 +828,7 @@ to `State`, which isn't used unless you do incremental event serialization.
 <csr-read-only-do-not-edit/>
 
  - 6 commits contributed to the release.
+ - 1 day passed between releases.
  - 4 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -580,10 +851,6 @@ to `State`, which isn't used unless you do incremental event serialization.
 
 <csr-id-b90defbf6ade8b3c1c0585f7933421f086eeb123/>
 
-### Other
-
- - <csr-id-b90defbf6ade8b3c1c0585f7933421f086eeb123/> update pulldown-cmark dependency
-
 ### New Features (BREAKING)
 
  - <csr-id-640148b354eb7325e1fbeec2acbd4867d3c536fc/> upgrade to pulldown-cmark v0.10
@@ -598,7 +865,7 @@ to `State`, which isn't used unless you do incremental event serialization.
 <csr-read-only-do-not-edit/>
 
  - 18 commits contributed to the release.
- - 48 days passed between releases.
+ - 49 days passed between releases.
  - 2 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -642,7 +909,7 @@ to `State`, which isn't used unless you do incremental event serialization.
 <csr-read-only-do-not-edit/>
 
  - 4 commits contributed to the release.
- - 1 day passed between releases.
+ - 2 days passed between releases.
  - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -672,7 +939,7 @@ to `State`, which isn't used unless you do incremental event serialization.
 <csr-read-only-do-not-edit/>
 
  - 6 commits contributed to the release.
- - 61 days passed between releases.
+ - 62 days passed between releases.
  - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -702,7 +969,7 @@ to `State`, which isn't used unless you do incremental event serialization.
 <csr-read-only-do-not-edit/>
 
  - 5 commits contributed to the release.
- - 4 days passed between releases.
+ - 5 days passed between releases.
  - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
  - 1 unique issue was worked on: [#62](https://github.com/Byron/pulldown-cmark-to-cmark/issues/62)
 
@@ -732,6 +999,7 @@ to `State`, which isn't used unless you do incremental event serialization.
 <csr-read-only-do-not-edit/>
 
  - 5 commits contributed to the release.
+ - 93 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 1 unique issue was worked on: [#61](https://github.com/Byron/pulldown-cmark-to-cmark/issues/61)
 
@@ -773,6 +1041,7 @@ to `State`, which isn't used unless you do incremental event serialization.
 <csr-read-only-do-not-edit/>
 
  - 14 commits contributed to the release.
+ - 342 days passed between releases.
  - 3 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -844,11 +1113,6 @@ to `State`, which isn't used unless you do incremental event serialization.
 
  - <csr-id-ff4050f4981f300d79b4d3214bdfe6c3c99ef205/> duplicated shortcut link definitions are only printed once.
 
-### Other
-
- - <csr-id-e214cc1be5305f9b43738affff4d1ca22242af37/> Replace `.travis.yml` with `.github/workflows/rust.yml`
-   We have already migrated from Travis CI to GitHub Actions.
-
 ### Commit Statistics
 
 <csr-read-only-do-not-edit/>
@@ -914,7 +1178,7 @@ to `State`, which isn't used unless you do incremental event serialization.
 <csr-read-only-do-not-edit/>
 
  - 6 commits contributed to the release.
- - 42 days passed between releases.
+ - 43 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -1030,7 +1294,7 @@ This release adds support for `pulldown-cmark v0.9`, [see the tracking issue](ht
 <csr-read-only-do-not-edit/>
 
  - 4 commits contributed to the release.
- - 20 days passed between releases.
+ - 21 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -1117,7 +1381,7 @@ Thanks to the author of [this PR](https://github.com/Byron/pulldown-cmark-to-cma
 <csr-read-only-do-not-edit/>
 
  - 7 commits contributed to the release over the course of 53 calendar days.
- - 53 days passed between releases.
+ - 54 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -1147,7 +1411,7 @@ Thanks to the author of [this PR](https://github.com/Byron/pulldown-cmark-to-cma
 <csr-read-only-do-not-edit/>
 
  - 3 commits contributed to the release.
- - 17 days passed between releases.
+ - 18 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -1172,7 +1436,7 @@ Thanks to the author of [this PR](https://github.com/Byron/pulldown-cmark-to-cma
 <csr-read-only-do-not-edit/>
 
  - 3 commits contributed to the release.
- - 75 days passed between releases.
+ - 76 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -1265,7 +1529,7 @@ Thanks to the author of [this PR](https://github.com/Byron/pulldown-cmark-to-cma
 <csr-read-only-do-not-edit/>
 
  - 2 commits contributed to the release over the course of 42 calendar days.
- - 72 days passed between releases.
+ - 73 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -1315,7 +1579,7 @@ Thanks to the author of [this PR](https://github.com/Byron/pulldown-cmark-to-cma
 <csr-read-only-do-not-edit/>
 
  - 4 commits contributed to the release over the course of 9 calendar days.
- - 20 days passed between releases.
+ - 21 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -1397,7 +1661,7 @@ Thanks to the author of [this PR](https://github.com/Byron/pulldown-cmark-to-cma
 <csr-read-only-do-not-edit/>
 
  - 10 commits contributed to the release over the course of 15 calendar days.
- - 81 days passed between releases.
+ - 82 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -1476,6 +1740,7 @@ Thanks to the author of [this PR](https://github.com/Byron/pulldown-cmark-to-cma
 <csr-read-only-do-not-edit/>
 
  - 5 commits contributed to the release.
+ - 35 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -1500,6 +1765,7 @@ Thanks to the author of [this PR](https://github.com/Byron/pulldown-cmark-to-cma
 <csr-read-only-do-not-edit/>
 
  - 3 commits contributed to the release.
+ - 117 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -1543,6 +1809,7 @@ Thanks to the author of [this PR](https://github.com/Byron/pulldown-cmark-to-cma
 <csr-read-only-do-not-edit/>
 
  - 6 commits contributed to the release.
+ - 195 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -1568,7 +1835,7 @@ Thanks to the author of [this PR](https://github.com/Byron/pulldown-cmark-to-cma
 <csr-read-only-do-not-edit/>
 
  - 4 commits contributed to the release over the course of 299 calendar days.
- - 309 days passed between releases.
+ - 310 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 

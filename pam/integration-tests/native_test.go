@@ -15,6 +15,7 @@ import (
 	"github.com/canonical/authd/internal/testutils/golden"
 	"github.com/canonical/authd/internal/testutils/ptytest"
 	localgroupstestutils "github.com/canonical/authd/internal/users/localentries/testutils"
+	"github.com/canonical/authd/pam/internal/adapter"
 	"github.com/canonical/authd/pam/internal/pam_test"
 	"github.com/stretchr/testify/require"
 )
@@ -31,10 +32,6 @@ type nativePtySessionSpec struct {
 	username         string
 	extraArgs        []string
 	expectedExitCode int
-	// skipForceNative prevents force_native_client=true from being added to the
-	// PAM args, allowing the module to detect the client type from the environment
-	// (e.g. via TERM=dumb).
-	skipForceNative bool
 }
 
 type nativePtyTestContext struct {
@@ -47,17 +44,16 @@ type nativePtyTestContext struct {
 func (r nativePtySessionRunner) start(t *testing.T, spec nativePtySessionSpec) *ptytest.Console {
 	t.Helper()
 
-	// Native PAM client uses text-based prompts via PAM conversation, so it
-	// needs the pam-runner to support conversations (unlike the CLI client
-	// which handles all interaction via its own bubbletea TUI).
-	cliEnv := append(r.cliEnv,
-		fmt.Sprintf("%s=1", pam_test.RunnerEnvSupportsConversation),
-	)
-	extraArgs := spec.extraArgs
-	if !spec.skipForceNative {
-		extraArgs = append([]string{"force_native_client=true"}, extraArgs...)
+	if spec.clientOptions.ClientType == nil {
+		spec.clientOptions.ClientType = ptrValue(adapter.Native)
 	}
-	c := startPAMRunner(t, r.clientPath, r.socketPath, spec.action, cliEnv, spec.clientOptions, extraArgs...)
+	if *spec.clientOptions.ClientType == AutoClientType {
+		spec.clientOptions.ClientType = nil
+	}
+
+	c := startPAMRunner(t, r.clientPath, r.socketPath, spec.action, r.cliEnv,
+		spec.clientOptions, spec.extraArgs...)
+
 	if spec.username != "" && spec.clientOptions.PamUser == "" {
 		nativeEnterUsername(t, c, spec.username)
 	}
@@ -99,7 +95,6 @@ func TestNativeAuthenticate(t *testing.T) {
 		wantLocalGroups    bool
 		wantSeparateDaemon bool
 		skipRunnerCheck    bool
-		skipForceNative    bool
 		socketPath         string
 		extraArgs          []string
 		expectedUser       string
@@ -117,10 +112,9 @@ func TestNativeAuthenticate(t *testing.T) {
 			// Verify that TERM=dumb causes the module to fall back to native mode
 			// even without force_native_client=true. This covers non-interactive
 			// consumers like Emacs TRAMP, scripted sudo, and Ansible.
-			clientOptions:   clientOptions{Term: "dumb"},
-			skipForceNative: true,
-			test:            nativeSimpleAuthNonInteractive,
-			expectedUser:    testUserName(t, "dumb-terminal"),
+			clientOptions: clientOptions{Term: "dumb", ClientType: ptrValue(AutoClientType)},
+			test:          nativeSimpleAuthNonInteractive,
+			expectedUser:  testUserName(t, "dumb-terminal"),
 		},
 		"Authenticate_user_successfully_with_upper_case": {
 			clientOptions: clientOptions{PamUser: strings.ToUpper(testUserName(t, "upper-case-native"))},
@@ -154,7 +148,7 @@ func TestNativeAuthenticate(t *testing.T) {
 			},
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
-				c.WaitFor(t, `Gimme your password:`)
+				c.WaitFor(t, `Gimme your password`)
 				c.SendLine(t, "goodpass")
 				nativeWaitForResult(t, c)
 			},
@@ -164,31 +158,30 @@ func TestNativeAuthenticate(t *testing.T) {
 			clientOptions: clientOptions{PamUser: testUserNameFull(t, examplebroker.UserIntegrationMfaPrefix, "auth-native")},
 			testWithSignals: func(t *testing.T, c *ptytest.Console, signalFn func(username string)) {
 				t.Helper()
-				username := testUserNameFull(t, examplebroker.UserIntegrationMfaPrefix, "auth-native")
-				nativeSelectBroker(t, c)
-				c.WaitFor(t, `Gimme your password:`)
-				c.SendLine(t, "r")
-				c.WaitFor(t, `Choose your authentication flow:`)
-				c.SendLine(t, "1")
-				c.WaitFor(t, `Gimme your password:`)
-				c.SendLine(t, "goodpass")
-				c.WaitFor(t, regexp.QuoteMeta(`Plug your fido device and press with your thumb:`))
-				sendEchoedLine(t, c, "r")
-				c.WaitFor(t, `Choose your authentication flow:`)
-				c.SendLine(t, "1")
-				c.WaitFor(t, regexp.QuoteMeta(`Plug your fido device and press with your thumb:`))
-				sendEchoedLine(t, c, "r")
-				c.WaitFor(t, `Choose your authentication flow:`)
-				c.SendLine(t, "2")
-				c.WaitFor(t, regexp.QuoteMeta(`Unlock your phone +33... or accept request on web interface:`))
-				signalFn(username)
-				c.SendLine(t, "")
-				c.WaitFor(t, regexp.QuoteMeta(`Plug your fido device and press with your thumb:`))
-				signalFn(username)
-				c.SendLine(t, "")
-				nativeWaitForResult(t, c)
+				nativeMfaAuth(t, c, func() { signalFn("") })
 			},
 			expectedUser: testUserNameFull(t, examplebroker.UserIntegrationMfaPrefix, "auth-native"),
+		},
+		"Authenticate_twice_with_mfa_user": {
+			clientOptions: clientOptions{PamUser: testUserNameFull(t, examplebroker.UserIntegrationMfaPrefix, "mfa-twice-native")},
+			testWithSignals: func(t *testing.T, c *ptytest.Console, signalFn func(username string)) {
+				t.Helper()
+				nativeMfaAuth(t, c, func() { signalFn("") })
+			},
+			after: func(t *testing.T, ctx *nativePtyTestContext) {
+				t.Helper()
+				signalFn := func() {
+					testutils.CreateBrokerCompletionSignal(t, ctx.runner.socketPath, ctx.baseSpec.clientOptions.PamUser)
+				}
+				ctx.run(t, nativePtySessionSpec{
+					action:        pam_test.RunnerActionLogin,
+					clientOptions: ctx.baseSpec.clientOptions,
+				}, func(t *testing.T, c *ptytest.Console) {
+					t.Helper()
+					nativeMfaAuth(t, c, signalFn)
+				})
+			},
+			expectedUser: testUserNameFull(t, examplebroker.UserIntegrationMfaPrefix, "mfa-twice-native"),
 		},
 		"Authenticate_user_with_form_mode_with_button": {
 			test: func(t *testing.T, c *ptytest.Console) {
@@ -231,7 +224,7 @@ func TestNativeAuthenticate(t *testing.T) {
 			clientOptions: clientOptions{PamServiceName: "polkit-1"},
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
-				c.WaitFor(t, `Gimme your password:`)
+				c.WaitFor(t, `Gimme your password`)
 				c.SendLine(t, "r")
 				c.WaitFor(t, `Choose your authentication flow:`)
 				sendEchoedLine(t, c, "7")
@@ -239,7 +232,7 @@ func TestNativeAuthenticate(t *testing.T) {
 				sendEchoedLine(t, c, "2")
 				c.WaitFor(t, `Choose action:`)
 				sendEchoedLine(t, c, "1")
-				c.WaitFor(t, `Enter your one time credential:`)
+				c.WaitFor(t, `Enter your one time credential`)
 				sendEchoedLine(t, c, "temporary pass00")
 				nativeWaitForResult(t, c)
 			},
@@ -326,7 +319,7 @@ func TestNativeAuthenticate(t *testing.T) {
 				for _, username := range []string{upper, mixed} {
 					ctx.run(t, nativePtySessionSpec{action: pam_test.RunnerActionLogin, username: username}, func(t *testing.T, c *ptytest.Console) {
 						t.Helper()
-						nativeWaitForLoginPasswordPrompt(t, c)
+						nativeWaitForLoginPasswordPrompt(t, c, `Gimme your password:`)
 						c.SendLine(t, "authd2404")
 						nativeWaitForResult(t, c)
 					})
@@ -793,11 +786,10 @@ func TestNativeAuthenticate(t *testing.T) {
 					cliEnv:     cliEnv,
 				},
 				baseSpec: nativePtySessionSpec{
-					action:          pam_test.RunnerActionLogin,
-					clientOptions:   clientOptions,
-					username:        username,
-					extraArgs:       tc.extraArgs,
-					skipForceNative: tc.skipForceNative,
+					action:        pam_test.RunnerActionLogin,
+					clientOptions: clientOptions,
+					username:      username,
+					extraArgs:     tc.extraArgs,
 				},
 				authdCancel: authdCancel,
 			}
@@ -833,6 +825,192 @@ func TestNativeAuthenticate(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestNativeAuthenticateFallbackNoPamTTY simulates PAM applications running
+// with a non-interactive terminal, or with a PAM_TTY that cannot be used. In
+// all these cases the native UI should be chosen automatically by the PAM
+// module, without forcing any options.
+func TestNativeAuthenticateFallbackNoPamTTY(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
+	tests := map[string]struct {
+		scenario redirectedIOScenario
+		term     string
+	}{
+		// stdout is a non-terminal while stdin stays the controlling terminal,
+		// and no PAM_TTY is set.
+		"No_PAM_TTY": {
+			scenario: redirectedIOScenario{ioRedirections: ">/dev/null", noPamTTY: true},
+		},
+		// PAM_TTY points to a path that cannot be opened.
+		"Invalid_PAM_TTY": {
+			scenario: redirectedIOScenario{ioRedirections: ">/dev/null", pamTTY: "/non-existent/tty"},
+		},
+		// PAM_TTY points to something that is not a terminal.
+		"Non_terminal_PAM_TTY": {
+			scenario: redirectedIOScenario{ioRedirections: ">/dev/null", pamTTY: os.DevNull},
+		},
+		// A dumb terminal cannot render the interactive interface even when
+		// PAM_TTY is a usable terminal.
+		"Dumb_terminal": {
+			scenario: redirectedIOScenario{ioRedirections: ">/dev/null"},
+			term:     "dumb",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			user := testUserName(t, "native-fallback")
+			runner := newRedirectedIORunner(t)
+			c := runner.startRedirectedIORunner(t, tc.scenario,
+				clientOptions{PamUser: user, Term: tc.term})
+
+			waitForFileContains(t, runner.outputFile, "Choose your provider")
+			c.SendLine(t, "2")
+			waitForFileContains(t, runner.outputFile, "Gimme your password")
+			c.SendLine(t, "goodpass")
+
+			runner.requireSuccessEventually(t, authd.SessionMode_LOGIN, user)
+			c.RequireSuccessfulExit(t)
+
+			out, err := os.ReadFile(runner.outputFile)
+			require.NoError(t, err, "failed to read runner output file")
+			golden.CheckOrUpdate(t, string(out))
+		})
+	}
+}
+
+// TestNativeAuthenticateRedirectedIO reproduces the cases in which the I/O streams
+// of the PAM client are redirected or closed, ensuring that the CLI still
+// prompts on the terminal (PAM_TTY) and the authentication flow works end-to-end.
+func TestNativeAuthenticateRedirectedIO(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
+	tests := map[string]struct {
+		redirections string
+		detach       bool
+	}{
+		// `sudo ls > /dev/null` and the sshuttle stdout-to-socket path: stdout
+		// is not the terminal, the prompt must still appear on the TTY.
+		"Redirected_stdout": {redirections: ">/dev/null"},
+
+		// stdout fully closed (>&-): the CLI must use the TTY for output.
+		"Closed_stdout": {redirections: ">&-"},
+
+		// stdin is /dev/null, input comes from the TTY.
+		"Stdin_from_devnull": {redirections: "</dev/null"},
+
+		// stdin is closed, input comes from the TTY.
+		"Closed_stdin": {redirections: "<&-"},
+
+		// stderr is closed, input comes from the stdin.
+		"Closed_stderr": {redirections: "2>&-"},
+
+		// stderr is redirected to a non-terminal instead of being closed.
+		"Redirected_stderr": {redirections: "2>/dev/null"},
+
+		// Both stdout and stderr are redirected to a non-terminal.
+		"Redirected_stdout_and_stderr": {redirections: ">/dev/null 2>/dev/null"},
+
+		// Both stdin and stdout detached, only the TTY remains usable.
+		"Closed_stdin_and_redirected_stdout": {redirections: "</dev/null >/dev/null"},
+
+		// Stdin is closed and stdout *and* stderr are redirected to a non-terminal.
+		// None of fd 0/1/2 is a terminal anymore.
+		"All_streams_detached": {redirections: "<&- 1>/dev/null 2>/dev/null"},
+
+		// No controlling terminal (setsid) and stdin detached: /dev/tty
+		// input fallback is unavailable, so input must come from the
+		// explicit PAM_TTY. This mirrors PAM clients without a controlling
+		// terminal that still get a PAM_TTY.
+		"Detached_session_input_from_pam_tty": {redirections: "</dev/null", detach: true},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			user := testUserName(t, "native-redirected-io")
+
+			runner := newRedirectedIORunner(t)
+			c := runner.startRedirectedIORunner(t,
+				redirectedIOScenario{
+					ioRedirections:       tc.redirections,
+					detachControllingTTY: tc.detach,
+				},
+				clientOptions{PamUser: user, ClientType: ptrValue(adapter.Native)})
+
+			nativeSimpleAuth(t, c)
+			c.RequireSuccessfulExit(t)
+
+			consoleOutput := ptySanitizeSnapshots(t, c)
+			golden.CheckOrUpdate(t, consoleOutput)
+			runner.requireSuccess(t, authd.SessionMode_LOGIN, user)
+		})
+	}
+}
+
+// TestNativeAuthenticateBackgroundDetachedStdin simulates something similar to
+// `bash -c 'sudo -S <<< "goodpass" id &'`: the runner is started in the
+// background with a controlling terminal that cannot be switched to raw mode,
+// so authd must automatically use the native PAM UI.
+func TestNativeAuthenticateBackgroundDetachedStdin(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
+	user := testUserName(t, "native-bg-detached")
+
+	runner := newRedirectedIORunner(t)
+	runner.startBackgroundDetachedRunner(t,
+		fmt.Sprintf(`printf '%%s\n' '2'; sleep %d; printf '%%s\n' 'goodpass'`,
+			testutils.MultipliedSleepDuration(1*time.Second)/time.Second),
+		clientOptions{PamUser: user})
+
+	runner.requireSuccessEventually(t, authd.SessionMode_LOGIN, user)
+
+	out, err := os.ReadFile(runner.outputFile)
+	require.NoError(t, err, "failed to read runner output file")
+	golden.CheckOrUpdate(t, string(out))
+}
+
+// TestNativeAuthenticateBackgroundStdin simulates a `sudo -S <<< "goodpass" id
+// &` background job whose process group is not orphaned: the controlling
+// terminal is not in our foreground process group, so authd must automatically
+// use the native PAM UI.
+func TestNativeAuthenticateBackgroundStdin(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
+	user := testUserName(t, "native-bg")
+
+	runner := newRedirectedIORunner(t)
+	runner.startBackgroundRunner(t,
+		fmt.Sprintf(`printf '%%s\n' '2'; sleep %d; printf '%%s\n' 'goodpass'`,
+			testutils.MultipliedSleepDuration(1*time.Second)/time.Second),
+		clientOptions{PamUser: user}, false)
+
+	runner.requireSuccessEventually(t, authd.SessionMode_LOGIN, user)
+
+	out, err := os.ReadFile(runner.outputFile)
+	require.NoError(t, err, "failed to read runner output file")
+	golden.CheckOrUpdate(t, string(out))
 }
 
 func TestNativeChangeAuthTok(t *testing.T) {
@@ -871,7 +1049,7 @@ func TestNativeChangeAuthTok(t *testing.T) {
 			expectedUser: testUserNameFull(t, examplebroker.UserIntegrationAuthModesPrefix, "password,mandatoryreset-integration-polkit"),
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
-				c.WaitFor(t, `Gimme your password:`)
+				c.WaitFor(t, `Gimme your password`)
 				c.SendLine(t, "goodpass")
 				nativeChangePassword(t, c, "authd2404", "authd2404")
 				nativeWaitForChangeAuthTokResult(t, c)
@@ -880,7 +1058,7 @@ func TestNativeChangeAuthTok(t *testing.T) {
 				t.Helper()
 				ctx.run(t, nativePtySessionSpec{action: pam_test.RunnerActionLogin, clientOptions: ctx.baseSpec.clientOptions}, func(t *testing.T, c *ptytest.Console) {
 					t.Helper()
-					nativeWaitForLoginPasswordPrompt(t, c)
+					nativeWaitForLoginPasswordPrompt(t, c, `Gimme your password`)
 					c.SendLine(t, "authd2404")
 					nativeWaitForResult(t, c)
 				})
@@ -1090,7 +1268,7 @@ func nativeReloginAfterPasswordChange(t *testing.T, ctx *nativePtyTestContext) {
 	t.Helper()
 	ctx.run(t, nativePtySessionSpec{action: pam_test.RunnerActionLogin, username: ctx.baseSpec.username}, func(t *testing.T, c *ptytest.Console) {
 		t.Helper()
-		nativeWaitForLoginPasswordPrompt(t, c)
+		nativeWaitForLoginPasswordPrompt(t, c, `Gimme your password:`)
 		c.SendLine(t, "authd2404")
 		nativeWaitForResult(t, c)
 	})
@@ -1109,6 +1287,35 @@ func nativeSimpleAuth(t *testing.T, c *ptytest.Console) {
 	nativeSelectBroker(t, c)
 	c.WaitFor(t, `Gimme your password:`)
 	c.SendLine(t, "goodpass")
+	nativeWaitForResult(t, c)
+}
+
+// nativeMfaAuth performs a full multi-factor authentication flow. signalFn is
+// called for the steps that wait for an out-of-band confirmation.
+func nativeMfaAuth(t *testing.T, c *ptytest.Console, signalFn func()) {
+	t.Helper()
+	// The broker selection is only shown the first time a user logs in. On
+	// later sessions authd auto-selects the broker used before.
+	nativeWaitForLoginPasswordPrompt(t, c, `Gimme your password:`)
+	c.SendLine(t, "r")
+	c.WaitFor(t, `Choose your authentication flow:`)
+	c.SendLine(t, "1")
+	c.WaitFor(t, `Gimme your password:`)
+	c.SendLine(t, "goodpass")
+	c.WaitFor(t, regexp.QuoteMeta(`Plug your fido device and press with your thumb:`))
+	sendEchoedLine(t, c, "r")
+	c.WaitFor(t, `Choose your authentication flow:`)
+	c.SendLine(t, "1")
+	c.WaitFor(t, regexp.QuoteMeta(`Plug your fido device and press with your thumb:`))
+	sendEchoedLine(t, c, "r")
+	c.WaitFor(t, `Choose your authentication flow:`)
+	c.SendLine(t, "2")
+	c.WaitFor(t, regexp.QuoteMeta(`Unlock your phone +33... or accept request on web interface:`))
+	signalFn()
+	c.SendLine(t, "")
+	c.WaitFor(t, regexp.QuoteMeta(`Plug your fido device and press with your thumb:`))
+	signalFn()
+	c.SendLine(t, "")
 	nativeWaitForResult(t, c)
 }
 
@@ -1151,13 +1358,16 @@ func nativeChangePassword(t *testing.T, c *ptytest.Console, newPassword string, 
 	c.SendLine(t, confirm)
 }
 
-func nativeWaitForLoginPasswordPrompt(t *testing.T, c *ptytest.Console) {
+// nativeWaitForLoginPasswordPrompt waits for the login password prompt.
+// Pass a colon-less pattern for the polkit service's blanked-out prompt
+// (see nativemodel.go's polkitServiceName handling).
+func nativeWaitForLoginPasswordPrompt(t *testing.T, c *ptytest.Console, passwordPrompt string) {
 	t.Helper()
 
-	matched := c.WaitFor(t, `Choose your provider:|Gimme your password:`)
+	matched := c.WaitFor(t, `Choose your provider:|`+passwordPrompt)
 	if strings.Contains(matched, `Choose your provider:`) {
 		sendEchoedLine(t, c, "2")
-		c.WaitFor(t, `Gimme your password:`)
+		c.WaitFor(t, passwordPrompt)
 	}
 }
 

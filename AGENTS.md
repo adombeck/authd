@@ -40,12 +40,30 @@ cargo build                              # NSS (debug mode)
 
 ### Testing Conventions
 - **Run tests**: `go test ./...` (add `-race` for race detection)
+- Use Go's `testing/synctest` for tests that exercise timers, deadlines, sleeps,
+  or other time-based concurrency when applicable. Prefer fake time over
+  real-time waits.
 - **Golden files**: Use `internal/testutils/golden` package
   - Update with `TESTS_UPDATE_GOLDEN=1 go test ./...`
   - Compare/update: `golden.CheckOrUpdate(t, got)` or `golden.CheckOrUpdateYAML(t, got)`
 - **Test helpers with underscores**: Functions prefixed `Z_ForTests_` are test-only exports (e.g., `Z_ForTests_CreateDBFromYAML`)
 - **Environment variables**:
   - `AUTHD_SKIP_ROOT_TESTS=1`: Skip tests that fail when run as root
+- **Broker provider build tags**: An untagged broker test run does not compile
+  the provider-specific wiring. When changing broker code, run tests for every
+  provider configuration:
+  ```bash
+  go -C authd-oidc-brokers test ./...
+  go -C authd-oidc-brokers test -tags withgoogle ./...
+  go -C authd-oidc-brokers generate --tags withmsentraid ./internal/providers/msentraid/...
+  go -C authd-oidc-brokers test -tags withmsentraid ./...
+  ```
+  The `withmsentraid` generation step requires the recursive
+  `libhimmelblau` submodule and generates the `himmelblau.h` and library
+  artifacts.
+- **Broker linting**: Pass provider tags explicitly, for example:
+  `scripts/golangci-lint -C authd-oidc-brokers run --build-tags withmsentraid`.
+  Use `--build-tags withgoogle` for Google-specific changes.
 
 ### Code Generation
 Critical: Run `go generate` before building PAM or when modifying protobuf files:
@@ -80,6 +98,16 @@ The PAM module has two implementations (see `pam/README.md`):
 - Golden files in `testdata/golden/` subdirectories matching test structure
 - Test-only exports via `export_test.go` files (no build tag, package-level visibility)
 - PAM integration tests use `ptytest` in `pam/integration-tests/`
+
+## Code Review
+
+During reviews, assess changes against existing installations as well as clean
+installs. For any new or stricter validation, verify that configurations and
+file modes accepted or tolerated by previous releases still work, including
+legacy layouts or settings that were previously ignored. Flag upgrade paths
+that could prevent a service from starting or users from authenticating.
+Require backward-compatible handling or a clear migration path and upgrade
+notice for intentional incompatibilities.
 
 ## Common Workflows
 
@@ -145,6 +173,12 @@ word boundaries before reaching 72 characters. Do **not** use
 - Use `go fmt` and `gofmt -s`
 - Rust: Standard cargo fmt conventions
 
+## Prose Style
+
+Write all prose in plain, simple English. This includes code comments,
+commit messages, and documentation. Use short sentences and everyday words.
+Do not omit technical details.
+
 ## Linting
 
 After making changes to Go files, run `scripts/golangci-lint` to check for lint errors:
@@ -156,3 +190,12 @@ If the changed files are below `authd-oidc-brokers/`, use the `-C` flag to run t
 ```bash
 scripts/golangci-lint -C authd-oidc-brokers run
 ```
+
+For Python files, this repository uses Ruff for linting and formatting. Install
+the pinned version and run the same checks used in CI:
+```bash
+python -m pip install -r .ruff-requirements.txt
+ruff check --config .ruff.toml .
+ruff format --check --config .ruff.toml .
+```
+

@@ -174,7 +174,7 @@ func TestSafeMessageDebug(t *testing.T) {
 			msg:            startAuthentication{},
 			prefix:         "prefix",
 			formatAndArgs:  []any{"suffix is %#v and %q", stopAuthentication{}, "suffix"},
-			wantSafeString: `prefix: adapter.startAuthentication{}, suffix is adapter.stopAuthentication{} and "suffix"`,
+			wantSafeString: `prefix: adapter.startAuthentication{}, suffix is adapter.stopAuthentication{gen:0x0} and "suffix"`,
 		},
 		"New_password_check": {
 			msg:             newPasswordCheck{password: "Super secret password!"},
@@ -342,7 +342,7 @@ func TestIsDumbTerminal(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv("TERM", tc.term)
-			require.Equal(t, tc.want, IsDumbTerminal())
+			require.Equal(t, tc.want, isDumbTerminal())
 		})
 	}
 }

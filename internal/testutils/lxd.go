@@ -32,7 +32,7 @@ const (
 	UseLXDEnvVar = "AUTHD_TESTS_USE_LXD"
 
 	// lxdImageAliasEnvVarPrefix is used to inject a pre-imported LXD image alias
-	// for a specific Ubuntu version in CI, e.g. AUTHD_TESTS_LXD_IMAGE_2604_ALIAS.
+	// for a specific Ubuntu version in CI, e.g. AUTHD_TESTS_LXD_IMAGE_2404_ALIAS.
 	lxdImageAliasEnvVarPrefix = "AUTHD_TESTS_LXD_IMAGE_"
 
 	// provisionedMarker is created inside the container after provisioning to
@@ -408,7 +408,7 @@ func provisionLXDContainer(t *testing.T, containerName string) {
 
 	lxcExec(t, containerName, "apt-get", "update", "-y")
 
-	// Enable the Go backports PPA so Build-Depends can resolve golang-go >= 1.25.
+	// Enable the Go backports PPA so Build-Depends can resolve golang-go >= 1.26.
 	lxcExec(t, containerName, "apt-get", "install", "-y", "--no-install-recommends",
 		"software-properties-common")
 	lxcExec(t, containerName, "add-apt-repository", "-y",
