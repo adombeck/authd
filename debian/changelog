@@ -1,8 +1,15 @@
-authd (0.7.0+git261009+5+d91f5254) noble; urgency=medium
+authd (0.7.1+git261021+6+f90b809b) noble; urgency=medium
 
-  * Github build. Run id: 37926401104. Run number: 5.
+  * Github build. Run id: 39586993154. Run number: 6.
 
- -- adombeck <18482300+adombeck@users.noreply.github.com>  Fri, 09 Oct 2026 11:53:09 +0000
+ -- Noor <nooreldeen.mansour@canonical.com>  Wed, 21 Oct 2026 10:47:12 +0000
+
+authd (0.7.1) stonking; urgency=medium
+
+  * CVE-2026-102631: Prevent recycled usernames from inheriting existing
+    accounts
+
+ -- Adrian Dombeck <adrian.dombeck@canonical.com>  Mon, 12 Oct 2026 13:49:04 +0200
 
 authd (0.7.0) stonking; urgency=medium
 
