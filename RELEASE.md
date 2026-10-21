@@ -500,8 +500,8 @@ snapcraft pack
 2. Install the new snaps:
 
     ```shell
-    sudo snap install --dangerous "$(ls -t ~/projects/authd-oidc-brokers/authd-msentraid*.snap | head -n1)"
-    sudo snap install --dangerous "$(ls -t ~/projects/authd-oidc-brokers/authd-google*.snap | head -n1)"
+    sudo snap install --dangerous "$(ls -t ~/projects/brokers/authd-msentraid*.snap | head -n1)"
+    sudo snap install --dangerous "$(ls -t ~/projects/brokers/authd-google*.snap | head -n1)"
     ```
 
 3. Configure the msentraid broker. You can find the issuer ID and client ID in
@@ -791,7 +791,7 @@ Install the authd package from the candidate PPA and the snaps from the candidat
 1. Go to https://launchpad.net/~ubuntu-enterprise-desktop/+archive/ubuntu/authd-candidate/+packages
 2. Click "Copy packages" in the top right
 3. Select the authd packages for all currently supported Ubuntu versions
-4. Destination PPA: authd stable
+4. Destination PPA: `authd [~ubuntu-enterprise-desktop/ubuntu/authd]`
 5. Destination series: The the same series
 6. Copy options: Rebuild the copied sources (because we build for more architectures in the stable PPA than in the candidate PPA)
 
